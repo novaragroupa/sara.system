@@ -9,7 +9,7 @@ const root = document.getElementById('root');
 
 async function api(action, payload) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_') === 0) {
-    throw new Error('لسه ما حطيتش رابط الـ Web app في ملف config.js');
+    throw new Error('https://script.google.com/macros/s/AKfycbyoFT0VTOYwH_RCltkouBqSO9N8VUXFOPaf8JoVD1PjSU49hH6VN-0wGKq_v6mbc63g/exec');
   }
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
