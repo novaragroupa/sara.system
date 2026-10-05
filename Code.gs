@@ -32,7 +32,10 @@ const SHEETS = {
   USERS: 'Users',
   CATEGORIES: 'FashionCategories',
   ITEMS: 'FashionItems',
-  SALES: 'FashionSales'
+  SALES: 'FashionSales',
+  FDOCS: 'FactoryDocs',
+  FLINES: 'FactoryLines',
+  FPAY: 'FactoryPayments'
 };
 
 const SCHEMAS = {
@@ -41,10 +44,16 @@ const SCHEMAS = {
   FashionItems: ['id', 'code', 'categoryId', 'categoryName', 'name', 'color', 'size',
     'wholesalePrice', 'profitPrice', 'totalPrice', 'quantity', 'dateAdded'],
   FashionSales: ['id', 'code', 'itemId', 'itemName', 'categoryName', 'color', 'size', 'customerName',
-    'customerPhone', 'quantity', 'wholesalePrice', 'profitPrice', 'unitPrice', 'totalPrice', 'notes', 'employee', 'date']
+    'customerPhone', 'quantity', 'wholesalePrice', 'profitPrice', 'unitPrice', 'totalPrice', 'notes', 'employee', 'date', 'orderId'],
+  // kind: in = وارد مصنع (فاتورة)، out = صادر مصنع (مرتجع للمصنع)
+  FactoryDocs: ['id', 'kind', 'docNo', 'factoryName', 'date', 'dueDate', 'reminderDays', 'total', 'paid',
+    'remaining', 'notes', 'employee', 'createdAt'],
+  FactoryLines: ['id', 'kind', 'docId', 'itemId', 'code', 'itemName', 'categoryName', 'color', 'size',
+    'quantity', 'unitCost', 'lineTotal', 'isNew'],
+  FactoryPayments: ['id', 'docId', 'docNo', 'factoryName', 'amount', 'date', 'notes', 'employee']
 };
 
-const DEFAULT_CATEGORIES = ['طرح', 'حجاب', 'دبابيس طرح'];
+const DEFAULT_CATEGORIES = ['فستان', 'عباية', 'شيميز', 'جيبة', 'أطقم نقابة', 'نقاب', 'طرحة', 'مكملات حجاب'];
 
 function setupSheets() {
   const ss = getSpreadsheet_();
@@ -60,19 +69,26 @@ function setupSheets() {
   if (usersSheet.getLastRow() < 2) {
     usersSheet.appendRow([Utilities.getUuid(), 'admin', 'admin123', 'مدير النظام', 'المدير العام', new Date()]);
   }
+  // بيضيف الأنواع الجاهزة الناقصة بس (مش بيكرر ولا بيمسح حاجة)
   const catSheet = ss.getSheetByName(SHEETS.CATEGORIES);
-  if (catSheet.getLastRow() < 2) {
-    DEFAULT_CATEGORIES.forEach(function (n) {
+  const existing = sheetToObjects_(catSheet).map(function (c) { return String(c.name); });
+  DEFAULT_CATEGORIES.forEach(function (n) {
+    if (existing.indexOf(n) === -1) {
       appendObject_(catSheet, SCHEMAS.FashionCategories, { id: Utilities.getUuid(), name: n, createdAt: nowStr_() });
-    });
-  }
+    }
+  });
 }
 
 /* ============ أدوات عامة ============ */
 
 function getSheet_(name) {
-  const sh = getSpreadsheet_().getSheetByName(name);
-  if (!sh) throw new Error('الشيت غير موجود: ' + name + ' — شغّل setupSheets() الأول');
+  const ss = getSpreadsheet_();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    if (!SCHEMAS[name]) throw new Error('الشيت غير موجود: ' + name);
+    sh = ss.insertSheet(name); // شيت جديد (زي شيتات المصنع) بيتعمل تلقائي أول ما يتطلب
+    ensureHeaders_(sh, SCHEMAS[name]);
+  }
   return sh;
 }
 
@@ -82,7 +98,11 @@ function sheetToObjects_(sh) {
   const headers = values[0];
   return values.slice(1).map(function (row) {
     const obj = {};
-    headers.forEach(function (h, i) { obj[h] = row[i]; });
+    headers.forEach(function (h, i) {
+      const v = row[i];
+      // التواريخ بترجع كنص ثابت عشان متتزحزحش يوم بسبب فرق التوقيت
+      obj[h] = v instanceof Date ? Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm:ss') : v;
+    });
     return obj;
   }).filter(function (o) { return o.id !== '' && o.id !== undefined && o.id !== null; });
 }
@@ -128,8 +148,10 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+function tz_() { return Session.getScriptTimeZone() || 'Africa/Cairo'; }
+
 function nowStr_() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Africa/Cairo', 'yyyy-MM-dd HH:mm:ss');
+  return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss');
 }
 
 /* ============ نقطة الدخول ============ */
@@ -155,6 +177,16 @@ function doPost(e) {
       case 'listFashionItems': result = { items: sheetToObjects_(getSheet_(SHEETS.ITEMS)) }; break;
       case 'sellFashionItem': result = sellItem_(body); break;
       case 'listFashionSales': result = { items: sheetToObjects_(getSheet_(SHEETS.SALES)) }; break;
+
+      case 'sellCart': result = sellCart_(body); break;
+      case 'deleteFashionCategory': result = deleteCategory_(body); break;
+
+      case 'listFactoryDocs': result = { items: sheetToObjects_(getSheet_(SHEETS.FDOCS)) }; break;
+      case 'listFactoryLines': result = { items: sheetToObjects_(getSheet_(SHEETS.FLINES)) }; break;
+      case 'listFactoryPayments': result = { items: sheetToObjects_(getSheet_(SHEETS.FPAY)) }; break;
+      case 'addFactoryInvoice': result = addFactoryInvoice_(body); break;
+      case 'addFactoryReturn': result = addFactoryReturn_(body); break;
+      case 'addFactoryPayment': result = addFactoryPayment_(body); break;
 
       case 'findProductByCode': result = findProductByCode_(body); break;
       case 'sellByCode': result = sellByCode_(body); break;
@@ -334,4 +366,250 @@ function accountingSummary_() {
 
 function invalidateAccountingCache_() {
   try { CacheService.getScriptCache().remove('accountingSummary_sara_v1'); } catch (e) { /* تجاهل */ }
+}
+
+/* ============ حذف نوع (لو فاضي) ============ */
+
+function deleteCategory_(body) {
+  if (sheetToObjects_(getSheet_(SHEETS.ITEMS)).some(function (i) { return String(i.categoryId) === String(body.id); })) {
+    return { error: 'مينفعش تحذفي نوع فيه أصناف' };
+  }
+  const sh = getSheet_(SHEETS.CATEGORIES);
+  const rowNum = findRowIndexById_(sh, body.id);
+  if (rowNum === -1) return { error: 'النوع غير موجود' };
+  sh.deleteRow(rowNum);
+  return {};
+}
+
+/* ============ بيع أكتر من صنف في عملية واحدة (السلة) ============ */
+
+function appendRows_(sh, headers, objs) {
+  if (!objs.length) return;
+  const live = ensureHeaders_(sh, headers);
+  const rows = objs.map(function (o) { return live.map(function (h) { return o[h] !== undefined ? o[h] : ''; }); });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, live.length).setValues(rows);
+}
+
+function sellCart_(body) {
+  const lines = body.items || [];
+  if (!lines.length) return { error: 'السلة فاضية' };
+  const sh = getSheet_(SHEETS.ITEMS);
+  const values = sh.getDataRange().getValues();
+  const headers = values[0];
+  const idCol = headers.indexOf('id'), qtyCol = headers.indexOf('quantity');
+  const rowById = {};
+  for (let r = 1; r < values.length; r++) rowById[String(values[r][idCol])] = r;
+
+  const agg = {};
+  lines.forEach(function (l) { agg[l.itemId] = (agg[l.itemId] || 0) + Math.max(1, Number(l.quantity) || 1); });
+
+  const ids = Object.keys(agg);
+  const items = {};
+  for (let k = 0; k < ids.length; k++) {
+    const r = rowById[ids[k]];
+    if (r === undefined) return { error: 'صنف في السلة مش موجود' };
+    const it = {};
+    headers.forEach(function (h, i) { it[h] = values[r][i]; });
+    if (agg[ids[k]] > (Number(it.quantity) || 0)) {
+      return { error: '"' + it.name + '": الكمية المطلوبة (' + agg[ids[k]] + ') أكبر من المتاح (' + (Number(it.quantity) || 0) + ')' };
+    }
+    items[ids[k]] = it;
+  }
+
+  const orderId = Utilities.getUuid(), date = nowStr_(), sales = [];
+  let total = 0;
+  ids.forEach(function (id) {
+    const it = items[id], q = agg[id];
+    sh.getRange(rowById[id] + 1, qtyCol + 1).setValue((Number(it.quantity) || 0) - q);
+    const sale = {
+      id: Utilities.getUuid(), code: it.code || '', itemId: it.id, itemName: it.name,
+      categoryName: it.categoryName, color: it.color || '', size: it.size || '',
+      customerName: body.customerName || '', customerPhone: body.customerPhone || '', quantity: q,
+      wholesalePrice: Number(it.wholesalePrice) * q, profitPrice: Number(it.profitPrice) * q,
+      unitPrice: it.totalPrice, totalPrice: Number(it.totalPrice) * q,
+      notes: body.notes || '', employee: body.employee || '', date: date, orderId: orderId
+    };
+    total += sale.totalPrice;
+    sales.push(sale);
+  });
+  appendRows_(getSheet_(SHEETS.SALES), SCHEMAS.FashionSales, sales);
+  invalidateAccountingCache_();
+  return { sales: sales, total: total, orderId: orderId };
+}
+
+/* ============ وارد / صادر مصنع ============ */
+
+function r2_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+function textDateCols_(sh) {
+  // تواريخ الفواتير بتتحفظ كنص عشان الشيت ميحولهاش
+  const live = ensureHeaders_(sh, SCHEMAS.FactoryDocs);
+  ['date', 'dueDate'].forEach(function (h) {
+    const c = live.indexOf(h) + 1;
+    if (c > 0) sh.getRange(1, c, Math.max(sh.getMaxRows(), 2), 1).setNumberFormat('@');
+  });
+}
+
+function nextDocNo_(docs, kind) {
+  const n = docs.filter(function (d) { return d.kind === kind; }).length + 1;
+  return (kind === 'in' ? 'IN-' : 'OUT-') + ('0000' + n).slice(-4);
+}
+
+function dateOnly_(v) {
+  const s = String(v || '').substring(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
+}
+
+function itemRowsMap_(sh) {
+  const values = sh.getDataRange().getValues();
+  const headers = values[0];
+  const idCol = headers.indexOf('id');
+  const map = {};
+  for (let r = 1; r < values.length; r++) {
+    const o = {};
+    headers.forEach(function (h, i) { o[h] = values[r][i]; });
+    map[String(values[r][idCol])] = { row: r + 1, item: o };
+  }
+  return { map: map, qtyCol: headers.indexOf('quantity') + 1 };
+}
+
+// فاتورة وارد: الأصناف القديمة بتزيد كميتها، والجديدة بتتعمل كصنف جديد. بنتأكد من كل حاجة قبل أي كتابة.
+function addFactoryInvoice_(body) {
+  const factory = String(body.factoryName || '').trim();
+  if (!factory) return { error: 'اكتب اسم المصنع' };
+  const lines = body.items || [];
+  if (!lines.length) return { error: 'ضيفي صنف واحد على الأقل في الفاتورة' };
+
+  const itemsSh = getSheet_(SHEETS.ITEMS);
+  const H = ensureHeaders_(itemsSh, SCHEMAS.FashionItems);
+  const info = itemRowsMap_(itemsSh);
+  const usedCodes = {};
+  Object.keys(info.map).forEach(function (id) { usedCodes[String(info.map[id].item.code)] = 1; });
+
+  const addQty = {}, newItems = [], lineObjs = [], docId = Utilities.getUuid();
+  let computed = 0;
+  for (let k = 0; k < lines.length; k++) {
+    const l = lines[k];
+    const qty = Number(l.quantity) || 0, cost = Number(l.unitCost) || 0;
+    if (qty <= 0) return { error: 'الكمية لازم تكون أكبر من صفر' };
+    const base = { id: Utilities.getUuid(), kind: 'in', docId: docId, quantity: qty, unitCost: cost, lineTotal: r2_(qty * cost) };
+    if (l.itemId) {
+      const ref = info.map[String(l.itemId)];
+      if (!ref) return { error: 'فيه صنف قديم مش موجود في المخزون' };
+      addQty[l.itemId] = (addQty[l.itemId] || 0) + qty;
+      lineObjs.push(Object.assign(base, { itemId: ref.item.id, code: ref.item.code, itemName: ref.item.name,
+        categoryName: ref.item.categoryName, color: ref.item.color || '', size: ref.item.size || '', isNew: 'لا' }));
+    } else {
+      const n = l.newItem || {};
+      if (!String(n.name || '').trim()) return { error: 'اكتب اسم الصنف الجديد' };
+      if (!n.categoryId) return { error: 'اختاري نوع الصنف الجديد' };
+      let code = String(n.code || '').trim();
+      if (!code) { do { code = genCode_(); } while (usedCodes[code]); }
+      else if (usedCodes[code]) return { error: 'الكود ' + code + ' مستخدم بالفعل' };
+      usedCodes[code] = 1;
+      const profit = Number(n.profitPrice) || 0;
+      const item = { id: Utilities.getUuid(), code: code, categoryId: n.categoryId, categoryName: n.categoryName,
+        name: String(n.name).trim(), color: n.color || '', size: n.size || '', wholesalePrice: cost, profitPrice: profit,
+        totalPrice: cost + profit, quantity: qty, dateAdded: nowStr_() };
+      newItems.push(item);
+      lineObjs.push(Object.assign(base, { itemId: item.id, code: code, itemName: item.name,
+        categoryName: item.categoryName, color: item.color, size: item.size, isNew: 'نعم' }));
+    }
+    computed += qty * cost;
+  }
+  const total = (body.total !== undefined && body.total !== '' && Number(body.total) >= 0) ? r2_(body.total) : r2_(computed);
+  const paid = r2_(body.paid);
+  if (paid < 0 || paid > total) return { error: 'المدفوع لازم يكون بين صفر وإجمالي الفاتورة' };
+
+  // ---- كتابة ----
+  Object.keys(addQty).forEach(function (id) {
+    const ref = info.map[id];
+    itemsSh.getRange(ref.row, info.qtyCol).setValue((Number(ref.item.quantity) || 0) + addQty[id]);
+  });
+  appendRows_(itemsSh, SCHEMAS.FashionItems, newItems);
+
+  const docsSh = getSheet_(SHEETS.FDOCS);
+  textDateCols_(docsSh);
+  const docs = sheetToObjects_(docsSh);
+  const date = dateOnly_(body.date);
+  const doc = { id: docId, kind: 'in', docNo: String(body.docNo || '').trim() || nextDocNo_(docs, 'in'), factoryName: factory,
+    date: date, dueDate: body.dueDate ? dateOnly_(body.dueDate) : '',
+    reminderDays: body.reminderDays === '' || body.reminderDays === undefined ? 3 : Number(body.reminderDays) || 0,
+    total: total, paid: paid, remaining: r2_(total - paid), notes: body.notes || '', employee: body.employee || '', createdAt: nowStr_() };
+  appendRows_(docsSh, SCHEMAS.FactoryDocs, [doc]);
+  appendRows_(getSheet_(SHEETS.FLINES), SCHEMAS.FactoryLines, lineObjs);
+  if (paid > 0) {
+    appendRows_(getSheet_(SHEETS.FPAY), SCHEMAS.FactoryPayments, [{ id: Utilities.getUuid(), docId: docId, docNo: doc.docNo,
+      factoryName: factory, amount: paid, date: date, notes: 'دفعة عند الاستلام', employee: body.employee || '' }]);
+  }
+  return { doc: doc, newItemsCount: newItems.length, updatedItemsCount: Object.keys(addQty).length };
+}
+
+// صادر مصنع: مرتجع بيطلع من المخزون للمصنع، وقيمته بتتخصم من المستحق للمصنع
+function addFactoryReturn_(body) {
+  const factory = String(body.factoryName || '').trim();
+  if (!factory) return { error: 'اكتب اسم المصنع' };
+  const lines = body.items || [];
+  if (!lines.length) return { error: 'ضيفي صنف واحد على الأقل' };
+
+  const itemsSh = getSheet_(SHEETS.ITEMS);
+  const info = itemRowsMap_(itemsSh);
+  const agg = {};
+  lines.forEach(function (l) { agg[l.itemId] = (agg[l.itemId] || 0) + (Number(l.quantity) || 0); });
+  const ids = Object.keys(agg);
+  for (let k = 0; k < ids.length; k++) {
+    const ref = info.map[ids[k]];
+    if (!ref) return { error: 'فيه صنف مش موجود في المخزون' };
+    if (agg[ids[k]] <= 0) return { error: 'الكمية لازم تكون أكبر من صفر' };
+    if (agg[ids[k]] > (Number(ref.item.quantity) || 0)) {
+      return { error: '"' + ref.item.name + '": الكمية (' + agg[ids[k]] + ') أكبر من المتاح (' + (Number(ref.item.quantity) || 0) + ')' };
+    }
+  }
+  const docId = Utilities.getUuid();
+  let total = 0;
+  const lineObjs = lines.map(function (l) {
+    const it = info.map[l.itemId].item, qty = Number(l.quantity) || 0, cost = Number(l.unitCost) || 0;
+    total += qty * cost;
+    return { id: Utilities.getUuid(), kind: 'out', docId: docId, itemId: it.id, code: it.code, itemName: it.name,
+      categoryName: it.categoryName, color: it.color || '', size: it.size || '', quantity: qty, unitCost: cost,
+      lineTotal: r2_(qty * cost), isNew: 'لا' };
+  });
+  ids.forEach(function (id) {
+    const ref = info.map[id];
+    itemsSh.getRange(ref.row, info.qtyCol).setValue((Number(ref.item.quantity) || 0) - agg[id]);
+  });
+  const docsSh = getSheet_(SHEETS.FDOCS);
+  textDateCols_(docsSh);
+  const docs = sheetToObjects_(docsSh);
+  const doc = { id: docId, kind: 'out', docNo: String(body.docNo || '').trim() || nextDocNo_(docs, 'out'), factoryName: factory,
+    date: dateOnly_(body.date), dueDate: '', reminderDays: '', total: r2_(total), paid: 0, remaining: 0,
+    notes: body.notes || '', employee: body.employee || '', createdAt: nowStr_() };
+  appendRows_(docsSh, SCHEMAS.FactoryDocs, [doc]);
+  appendRows_(getSheet_(SHEETS.FLINES), SCHEMAS.FactoryLines, lineObjs);
+  return { doc: doc };
+}
+
+// دفعة على فاتورة: بتنقص المتبقي. مثال: عليكي 40 ودفعتي 5 يبقى المتبقي 35
+function addFactoryPayment_(body) {
+  const sh = getSheet_(SHEETS.FDOCS);
+  const rowNum = findRowIndexById_(sh, body.docId);
+  if (rowNum === -1) return { error: 'الفاتورة غير موجودة' };
+  const doc = sheetToObjects_(sh).find(function (d) { return String(d.id) === String(body.docId); });
+  if (doc.kind !== 'in') return { error: 'الدفع بيتسجل على فواتير الوارد بس' };
+  const amount = r2_(body.amount);
+  if (amount <= 0) return { error: 'اكتبي مبلغ أكبر من صفر' };
+  const remaining = r2_(doc.remaining);
+  if (amount > remaining) return { error: 'المبلغ أكبر من المتبقي على الفاتورة (' + remaining + ')' };
+
+  const paid = r2_(Number(doc.paid) + amount), left = r2_(Number(doc.total) - paid);
+  updateCellByHeader_(sh, rowNum, SCHEMAS.FactoryDocs, 'paid', paid);
+  updateCellByHeader_(sh, rowNum, SCHEMAS.FactoryDocs, 'remaining', left);
+  const payment = { id: Utilities.getUuid(), docId: doc.id, docNo: doc.docNo, factoryName: doc.factoryName, amount: amount,
+    date: dateOnly_(body.date), notes: body.notes || '', employee: body.employee || '' };
+  const pSh = getSheet_(SHEETS.FPAY);
+  const live = ensureHeaders_(pSh, SCHEMAS.FactoryPayments);
+  const dc = live.indexOf('date') + 1;
+  if (dc > 0) pSh.getRange(1, dc, Math.max(pSh.getMaxRows(), 2), 1).setNumberFormat('@');
+  appendRows_(pSh, SCHEMAS.FactoryPayments, [payment]);
+  return { payment: payment, paid: paid, remaining: left };
 }

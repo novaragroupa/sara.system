@@ -465,3 +465,22 @@ tbody tr:hover { background: var(--card-2); }
 .topbar h2 { color: var(--teal-dark); }
 .field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 3px rgba(19, 123, 139, 0.12); }
 .color-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--line); border: 1px solid var(--border); vertical-align: middle; margin-left: 6px; }
+
+/* ---------- نقطة البيع والمصنع ---------- */
+.modal.wide { max-width: 860px; }
+.pos-result { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: right;
+  padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-2);
+  color: var(--text); cursor: pointer; font-size: 14px; }
+.pos-result:hover:not(:disabled) { border-color: var(--coral); background: #fff; }
+.pos-result:disabled { opacity: .5; cursor: not-allowed; }
+.pos-result small { display: block; color: var(--text-muted); font-size: 12px; }
+.cart-total { display: flex; justify-content: space-between; align-items: center; font-size: 16px; padding: 10px 4px 0; }
+.cart-total strong { color: var(--teal-dark); font-size: 18px; }
+.line-row { display: grid; grid-template-columns: 56px repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; align-items: center;
+  padding: 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-2); }
+.line-row input, .line-row select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
+.nav-badge { margin-right: auto; background: var(--coral); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 7px; }
+.alert-card { border-color: rgba(245, 85, 91, 0.45); background: #fff7f7; }
+.alert-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.alert-row:last-child { border-bottom: none; }
+@media (max-width: 700px) { .pos-grid { grid-template-columns: 1fr !important; } }
