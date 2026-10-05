@@ -305,7 +305,8 @@ const NAV_ITEMS = [
   { id: 'factoryOut', label: 'صادر مصنع', icon: '📤' },
   { id: 'inventory', label: 'المخزون', icon: '📦' },
   { id: 'accounting', label: 'الحسابات', icon: '📊' },
-  { id: 'users', label: 'الموظفين', icon: '👤', adminOnly: true }
+  { id: 'users', label: 'الموظفين', icon: '👤', adminOnly: true },
+  { id: 'payroll', label: 'المرتبات', icon: '💰', adminOnly: true }
 ];
 
 function renderApp() {
@@ -365,7 +366,8 @@ function renderApp() {
     factoryOut: renderFactoryOut,
     inventory: renderInventory,
     accounting: renderAccounting,
-    users: renderUsers
+    users: renderUsers,
+    payroll: renderPayroll
   };
   (renderers[CURRENT_SECTION] || renderDashboard)();
   refreshAlertsBadge();
@@ -1158,6 +1160,7 @@ function openAddUserForm() {
       <div class="field"><label>اسم الموظف</label><input name="name" required /></div>
       <div class="field"><label>اسم المستخدم (يوزر نيم)</label><input name="username" required /></div>
       <div class="field"><label>كلمة المرور</label><input type="password" name="password" required /></div>
+      <div class="field"><label>سعر الساعة (ج.م)</label><input type="number" name="hourlyRate" min="0" step="0.01" value="0" /></div>
       <div class="field">
         <label>الصلاحية</label>
         <select name="role" required>
@@ -1177,12 +1180,198 @@ function openAddUserForm() {
       const fd = new FormData(e.target);
       saveInBackground(overlay, async function () {
         await api('addUser', {
-          name: fd.get('name'), username: fd.get('username'), password: fd.get('password'), role: fd.get('role')
+          name: fd.get('name'), username: fd.get('username'), password: fd.get('password'), role: fd.get('role'),
+          hourlyRate: fd.get('hourlyRate')
         });
         invalidateCache('listUsers');
       }, { successMsg: 'تمت إضافة الموظف', onDone: function () { loadUsersTable(); } });
     });
   });
+}
+
+/* ============ المرتبات ============ */
+// المرتب = (سعر الساعة × ساعات الشهر) + (مبيعات الموظف في الشهر × نسبة العمولة %)
+// العمولة بتتحسب لوحدها من سجل المبيعات، فأي فاتورة جديدة بتزوّدها تلقائي.
+
+let PAYROLL_MONTH = localToday().substring(0, 7);
+
+function r2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function num2(n) { return r2(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function commOf(u) {
+  return (u.commissionRate === '' || u.commissionRate === undefined || u.commissionRate === null) ? 1 : Number(u.commissionRate) || 0;
+}
+
+function invalidatePayrollCaches() {
+  ['listUsers', 'listWorkHours'].forEach(invalidateCache);
+}
+
+async function renderPayroll() {
+  if (CURRENT_USER.role !== 'مدير النظام') {
+    content().innerHTML = `<div class="empty-state">هذا القسم لمدير النظام فقط</div>`;
+    return;
+  }
+  setBreadcrumb('مرتب الموظفين: ساعات الشغل + نسبة المبيعات');
+  content().innerHTML = `
+    <div class="section-header">
+      <div class="field" style="margin:0;max-width:220px"><label>الشهر</label>
+        <input type="month" id="payroll-month" value="${esc(PAYROLL_MONTH)}" /></div>
+    </div>
+    <div id="payroll-body"><div class="empty-state">جاري التحميل...</div></div>
+  `;
+  document.getElementById('payroll-month').addEventListener('change', function (e) {
+    if (!e.target.value) return;
+    PAYROLL_MONTH = e.target.value;
+    loadPayroll();
+  });
+  await loadPayroll();
+}
+
+async function loadPayroll() {
+  const body = document.getElementById('payroll-body');
+  let users, hours, sales;
+  try {
+    const res = await Promise.all([cachedApi('listUsers'), cachedApi('listWorkHours'), cachedApi('listFashionSales')]);
+    users = res[0].items; hours = res[1].items; sales = res[2].items;
+  } catch (err) {
+    body.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+    return;
+  }
+  const month = PAYROLL_MONTH;
+  const rows = users.map(function (u) {
+    const myHours = hours.filter(function (h) { return String(h.userId) === String(u.id) && String(h.date).substring(0, 7) === month; });
+    const totalHours = myHours.reduce(function (s, h) { return s + (Number(h.hours) || 0); }, 0);
+    const mySales = sales.filter(function (x) { return String(x.employee) === String(u.name) && String(x.date).substring(0, 7) === month; });
+    const salesTotal = mySales.reduce(function (s, x) { return s + (Number(x.totalPrice) || 0); }, 0);
+    const rate = Number(u.hourlyRate) || 0, comm = commOf(u);
+    const base = r2(rate * totalHours), commission = r2(salesTotal * comm / 100);
+    return { u: u, rate: rate, comm: comm, hours: totalHours, base: base, salesTotal: salesTotal, commission: commission, total: r2(base + commission) };
+  });
+  const sum = function (k) { return rows.reduce(function (s, r) { return s + r[k]; }, 0); };
+
+  body.innerHTML = `
+    <div class="grid grid-3" style="margin-bottom:16px">
+      <div class="card"><div class="stat-label">إجمالي المرتبات الثابتة</div><div class="stat-value dark" style="font-size:20px">${num2(sum('base'))} ج.م</div></div>
+      <div class="card"><div class="stat-label">إجمالي العمولات</div><div class="stat-value dark" style="font-size:20px">${num2(sum('commission'))} ج.م</div></div>
+      <div class="card"><div class="stat-label">إجمالي المطلوب دفعه</div><div class="stat-value brown" style="font-size:20px">${num2(sum('total'))} ج.م</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>الموظف</th><th>سعر الساعة</th><th>الساعات</th><th>المرتب الثابت</th><th>مبيعات الشهر</th><th>النسبة</th><th>العمولة</th><th>الإجمالي</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(function (r) {
+            return `<tr>
+              <td>${esc(r.u.name)}</td>
+              <td>${r.rate ? num2(r.rate) + ' ج.م' : '<span class="badge badge-danger">غير محدد</span>'}</td>
+              <td>${num2(r.hours)}</td>
+              <td>${num2(r.base)} ج.م</td>
+              <td>${num2(r.salesTotal)} ج.م</td>
+              <td>${num2(r.comm)}%</td>
+              <td>${num2(r.commission)} ج.م</td>
+              <td><strong>${num2(r.total)} ج.م</strong></td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-outline btn-sm" data-hours="${esc(r.u.id)}">⏱ الساعات</button>
+                <button class="btn btn-outline btn-sm" data-pay="${esc(r.u.id)}">⚙ السعر والنسبة</button>
+              </td></tr>`;
+          }).join('') || '<tr><td colspan="9" class="empty-state">لا يوجد موظفين</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:10px;color:#6b8790;font-size:13px">العمولة = إجمالي مبيعات الموظف في الشهر × النسبة، وبتزيد تلقائي مع كل فاتورة جديدة بيسجلها.</p>
+  `;
+  body.querySelectorAll('[data-hours]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = rows.find(function (x) { return String(x.u.id) === b.getAttribute('data-hours'); });
+      openHoursModal(r.u);
+    });
+  });
+  body.querySelectorAll('[data-pay]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const r = rows.find(function (x) { return String(x.u.id) === b.getAttribute('data-pay'); });
+      openPayRateForm(r.u);
+    });
+  });
+}
+
+function openPayRateForm(u) {
+  const overlay = openModal('سعر الساعة ونسبة المبيعات: ' + esc(u.name), `
+    <form id="pay-form">
+      <div class="field"><label>سعر الساعة (ج.م)</label><input type="number" name="hourlyRate" min="0" step="0.01" value="${esc(Number(u.hourlyRate) || '')}" required /></div>
+      <div class="field"><label>نسبة المبيعات (%)</label><input type="number" name="commissionRate" min="0" max="100" step="0.01" value="${esc(commOf(u))}" required /></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">حفظ</button>
+        <button type="button" class="btn btn-outline" id="cancel-btn">إلغاء</button>
+      </div>
+    </form>
+  `, function (el) {
+    el.querySelector('#cancel-btn').addEventListener('click', function () { overlay.remove(); });
+    el.querySelector('#pay-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      saveInBackground(overlay, async function () {
+        await api('updateUserPay', { id: u.id, hourlyRate: fd.get('hourlyRate'), commissionRate: fd.get('commissionRate') });
+        invalidatePayrollCaches();
+      }, { successMsg: 'تم الحفظ', onDone: loadPayroll });
+    });
+  });
+}
+
+async function openHoursModal(u) {
+  const month = PAYROLL_MONTH;
+  const overlay = openModal('ساعات ' + esc(u.name) + ' - ' + esc(month), `<div class="empty-state">جاري التحميل...</div>`);
+  async function draw() {
+    let items;
+    try { items = (await cachedApi('listWorkHours')).items; }
+    catch (err) { overlay.querySelector('#modal-body').innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; return; }
+    const mine = items.filter(function (h) { return String(h.userId) === String(u.id) && String(h.date).substring(0, 7) === month; })
+      .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    const total = mine.reduce(function (s, h) { return s + (Number(h.hours) || 0); }, 0);
+    const defDate = localToday().substring(0, 7) === month ? localToday() : month + '-01';
+    overlay.querySelector('#modal-body').innerHTML = `
+      <form id="hours-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="margin:0"><label>التاريخ</label><input type="date" name="date" value="${defDate}" required /></div>
+        <div class="field" style="margin:0;max-width:110px"><label>الساعات</label><input type="number" name="hours" min="0.25" max="24" step="0.25" required /></div>
+        <div class="field" style="margin:0;flex:1;min-width:120px"><label>ملاحظة</label><input name="notes" /></div>
+        <button type="submit" class="btn btn-primary">+ إضافة</button>
+      </form>
+      <div class="table-wrap" style="margin-top:14px;max-height:300px;overflow:auto">
+        <table>
+          <thead><tr><th>التاريخ</th><th>الساعات</th><th>ملاحظة</th><th></th></tr></thead>
+          <tbody>
+            ${mine.map(function (h) {
+              return `<tr><td>${esc(String(h.date).substring(0, 10))}</td><td>${num2(h.hours)}</td><td>${esc(h.notes) || '-'}</td>
+                <td><button class="btn btn-danger btn-sm" data-del="${esc(h.id)}">حذف</button></td></tr>`;
+            }).join('') || '<tr><td colspan="4" class="empty-state">لا توجد ساعات مسجلة في الشهر ده</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <p style="margin:10px 0"><strong>إجمالي ساعات الشهر: ${num2(total)}</strong></p>
+      <div class="modal-actions"><button type="button" class="btn btn-outline" id="close-btn">إغلاق</button></div>
+    `;
+    overlay.querySelector('#close-btn').addEventListener('click', function () { overlay.remove(); loadPayroll(); });
+    overlay.querySelector('#hours-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const fd = new FormData(e.target), btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      try {
+        await api('addWorkHours', { userId: u.id, date: fd.get('date'), hours: fd.get('hours'), notes: fd.get('notes') });
+        invalidateCache('listWorkHours');
+        toast('تم تسجيل الساعات', 'success');
+        draw();
+      } catch (err) { btn.disabled = false; toast(err.message, 'error'); }
+    });
+    overlay.querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        if (!confirm('حذف السجل ده؟')) return;
+        b.disabled = true;
+        try {
+          await api('deleteWorkHours', { id: b.getAttribute('data-del') });
+          invalidateCache('listWorkHours');
+          draw();
+        } catch (err) { b.disabled = false; toast(err.message, 'error'); }
+      });
+    });
+  }
+  draw();
 }
 
 /* ============ وارد / صادر مصنع ============ */

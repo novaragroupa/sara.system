@@ -35,11 +35,13 @@ const SHEETS = {
   SALES: 'FashionSales',
   FDOCS: 'FactoryDocs',
   FLINES: 'FactoryLines',
-  FPAY: 'FactoryPayments'
+  FPAY: 'FactoryPayments',
+  HOURS: 'WorkHours'
 };
 
 const SCHEMAS = {
-  Users: ['id', 'username', 'password', 'role', 'name', 'createdAt'],
+  // hourlyRate = سعر الساعة | commissionRate = نسبة المبيعات % (الافتراضي 1)
+  Users: ['id', 'username', 'password', 'role', 'name', 'createdAt', 'hourlyRate', 'commissionRate'],
   FashionCategories: ['id', 'name', 'createdAt'],
   FashionItems: ['id', 'code', 'categoryId', 'categoryName', 'name', 'color', 'size',
     'wholesalePrice', 'profitPrice', 'totalPrice', 'quantity', 'dateAdded'],
@@ -50,7 +52,9 @@ const SCHEMAS = {
     'remaining', 'notes', 'employee', 'createdAt'],
   FactoryLines: ['id', 'kind', 'docId', 'itemId', 'code', 'itemName', 'categoryName', 'color', 'size',
     'quantity', 'unitCost', 'lineTotal', 'isNew'],
-  FactoryPayments: ['id', 'docId', 'docNo', 'factoryName', 'amount', 'date', 'notes', 'employee']
+  FactoryPayments: ['id', 'docId', 'docNo', 'factoryName', 'amount', 'date', 'notes', 'employee'],
+  // ساعات شغل الموظفين (سجل يومي)
+  WorkHours: ['id', 'userId', 'userName', 'date', 'hours', 'notes', 'createdAt']
 };
 
 const DEFAULT_CATEGORIES = ['فستان', 'عباية', 'شيميز', 'جيبة', 'أطقم نقابة', 'نقاب', 'طرحة', 'مكملات حجاب'];
@@ -191,6 +195,11 @@ function doPost(e) {
       case 'findProductByCode': result = findProductByCode_(body); break;
       case 'sellByCode': result = sellByCode_(body); break;
 
+      case 'updateUserPay': result = updateUserPay_(body); break;
+      case 'listWorkHours': result = { items: sheetToObjects_(getSheet_(SHEETS.HOURS)) }; break;
+      case 'addWorkHours': result = addWorkHours_(body); break;
+      case 'deleteWorkHours': result = deleteWorkHours_(body); break;
+
       case 'accountingSummary': result = accountingSummary_(); break;
       default: result = { error: 'إجراء غير معروف: ' + body.action };
     }
@@ -224,10 +233,51 @@ function addUser_(body) {
   }
   const obj = {
     id: Utilities.getUuid(), username: body.username, password: body.password,
-    role: body.role, name: body.name, createdAt: nowStr_()
+    role: body.role, name: body.name, createdAt: nowStr_(),
+    hourlyRate: Number(body.hourlyRate) || 0, commissionRate: 1
   };
   appendObject_(sh, SCHEMAS.Users, obj);
   return { user: stripPassword_(obj) };
+}
+
+/* ============ المرتبات: سعر الساعة + ساعات الشغل ============ */
+// المرتب الثابت = سعر الساعة × ساعات الشهر، والعمولة = مبيعات الموظف × النسبة.
+// الحساب نفسه بيتم في الواجهة من الساعات + سجل المبيعات (FashionSales.employee)،
+// فكل فاتورة جديدة بتتحسب في العمولة تلقائي من غير أي خطوة زيادة.
+
+function updateUserPay_(body) {
+  const sh = getSheet_(SHEETS.USERS);
+  const rowNum = findRowIndexById_(sh, body.id);
+  if (rowNum === -1) return { error: 'الموظف غير موجود' };
+  const rate = Number(body.hourlyRate), comm = Number(body.commissionRate);
+  if (isNaN(rate) || rate < 0) return { error: 'سعر الساعة غير صحيح' };
+  if (isNaN(comm) || comm < 0 || comm > 100) return { error: 'النسبة لازم تكون بين 0 و 100' };
+  updateCellByHeader_(sh, rowNum, SCHEMAS.Users, 'hourlyRate', rate);
+  updateCellByHeader_(sh, rowNum, SCHEMAS.Users, 'commissionRate', comm);
+  return { id: body.id, hourlyRate: rate, commissionRate: comm };
+}
+
+function addWorkHours_(body) {
+  const user = sheetToObjects_(getSheet_(SHEETS.USERS)).find(function (u) { return String(u.id) === String(body.userId); });
+  if (!user) return { error: 'الموظف غير موجود' };
+  const hours = Number(body.hours);
+  if (isNaN(hours) || hours <= 0 || hours > 24) return { error: 'عدد الساعات لازم يكون بين 0 و 24' };
+  const sh = getSheet_(SHEETS.HOURS);
+  const live = ensureHeaders_(sh, SCHEMAS.WorkHours);
+  const dc = live.indexOf('date') + 1; // التاريخ نص عشان الشيت ميحوّلوش
+  if (dc > 0) sh.getRange(1, dc, Math.max(sh.getMaxRows(), 2), 1).setNumberFormat('@');
+  const obj = { id: Utilities.getUuid(), userId: user.id, userName: user.name, date: dateOnly_(body.date),
+    hours: hours, notes: body.notes || '', createdAt: nowStr_() };
+  appendRows_(sh, SCHEMAS.WorkHours, [obj]);
+  return { item: obj };
+}
+
+function deleteWorkHours_(body) {
+  const sh = getSheet_(SHEETS.HOURS);
+  const rowNum = findRowIndexById_(sh, body.id);
+  if (rowNum === -1) return { error: 'السجل غير موجود' };
+  sh.deleteRow(rowNum);
+  return {};
 }
 
 /* ============ الأزياء: الأنواع ============ */
