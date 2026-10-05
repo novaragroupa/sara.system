@@ -186,55 +186,101 @@ async function saveInBackground(overlay, work, opts) {
 /* ============ تسجيل الدخول ============ */
 
 function renderLogin(errorMsg) {
+  const heading = 'كل ما تحتاجه المرأة المسلمة من زي شرعي'.split(' ').map(function (w, i) {
+    return `<span class="w" style="animation-delay:${(0.55 + i * 0.09).toFixed(2)}s">${w}</span>`;
+  }).join(' ');
+  const floaters = [
+    ['🧕', 8, 16, -2, 30], ['👗', 24, 21, -9, 26], ['✨', 40, 13, -5, 20], ['🧣', 57, 19, -13, 28],
+    ['📍', 72, 15, -7, 22], ['🌸', 88, 22, -11, 26], ['👜', 15, 24, -16, 24], ['💫', 80, 17, -3, 20]
+  ].map(function (f) {
+    return `<span class="floater" style="--x:${f[1]}%;--d:${f[2]}s;--delay:${f[3]}s;--s:${f[4]}px">${f[0]}</span>`;
+  }).join('');
+
   root.innerHTML = `
-    <div class="login-screen">
-      <div class="login-art">
-        <span class="art-circle c1"></span><span class="art-circle c2"></span><span class="art-circle c3"></span>
-        <div class="art-content">
-          <div class="art-logo-wrap"><img src="logo.png" alt="${SHOP_NAME}" /></div>
-          <h2>كل ما تحتاجه المرأة المسلمة من زي شرعي</h2>
-          <p>نظام إدارة محل ${SHOP_NAME}</p>
-          <div class="art-chips"><span>🧕 الأزياء</span><span>🛒 نقطة البيع</span><span>🏭 المصانع</span><span>📊 الحسابات</span></div>
-        </div>
-      </div>
+    <div class="login-screen" id="login-screen">
       <div class="login-form-side">
-        <div class="login-card">
+        <span class="fb f1"></span><span class="fb f2"></span>
+        <div class="login-card ${errorMsg ? 'shake' : ''}">
           <img src="logo.png" class="card-logo" alt="${SHOP_NAME}" />
-          <h1>أهلاً بيكي 👋</h1>
+          <div class="hello-badge">✨ نظام إدارة المحل</div>
+          <h1>أهلاً بيكي <span class="wave">👋</span></h1>
           <p class="subtitle">سجّلي دخولك عشان تكملي شغلك</p>
           ${errorMsg ? `<div class="error-msg">${esc(errorMsg)}</div>` : ''}
           <form id="login-form">
-            <div class="field">
+            <div class="field st st1">
               <label>اسم المستخدم</label>
               <div class="input-icon"><span>👤</span><input type="text" name="username" required autocomplete="username" /></div>
             </div>
-            <div class="field">
+            <div class="field st st2">
               <label>كلمة المرور</label>
               <div class="input-icon"><span>🔒</span><input type="password" name="password" id="login-pw" required autocomplete="current-password" />
                 <button type="button" class="pw-toggle" id="pw-toggle" aria-label="إظهار كلمة المرور">👁</button></div>
             </div>
-            <button class="btn btn-primary btn-block login-btn" type="submit">دخول</button>
+            <button class="btn btn-primary btn-block login-btn st st3" type="submit">
+              <span class="btn-label">دخول</span><span class="btn-spin"></span><i class="shine"></i>
+            </button>
           </form>
-          <div class="login-foot">${SHOP_NAME} · أزياء المرأة المسلمة</div>
+          <div class="login-foot st st4">${SHOP_NAME} · أزياء المرأة المسلمة</div>
+        </div>
+      </div>
+      <div class="login-art" id="login-art">
+        <span class="art-circle c1"></span><span class="art-circle c2"></span><span class="art-circle c3"></span>
+        <div class="art-floaters">${floaters}</div>
+        <svg class="art-wave w1" viewBox="0 0 2400 120" preserveAspectRatio="none"><path d="M0 60 Q150 0 300 60 T600 60 T900 60 T1200 60 T1500 60 T1800 60 T2100 60 T2400 60 V120 H0 Z"/></svg>
+        <svg class="art-wave w2" viewBox="0 0 2400 120" preserveAspectRatio="none"><path d="M0 70 Q150 20 300 70 T600 70 T900 70 T1200 70 T1500 70 T1800 70 T2100 70 T2400 70 V120 H0 Z"/></svg>
+        <div class="art-content">
+          <div class="logo-float">
+            <div class="logo-stage">
+              <span class="pulse p1"></span><span class="pulse p2"></span>
+              <div class="art-logo-wrap" id="art-tilt"><img src="logo.png" alt="${SHOP_NAME}" /><i class="sheen"></i></div>
+            </div>
+          </div>
+          <h2>${heading}</h2>
+          <p class="art-sub">نظام إدارة محل ${SHOP_NAME}</p>
+          <div class="art-chips"><span>🧕 الأزياء</span><span>🛒 نقطة البيع</span><span>🏭 المصانع</span><span>📊 الحسابات</span></div>
         </div>
       </div>
     </div>
   `;
+
+  // إظهار/إخفاء كلمة المرور
   document.getElementById('pw-toggle').addEventListener('click', function () {
     const pw = document.getElementById('login-pw');
     pw.type = pw.type === 'password' ? 'text' : 'password';
   });
+
+  // إضاءة بتتحرك مع الماوس + ميلان خفيف للوجو
+  const art = document.getElementById('login-art'), tilt = document.getElementById('art-tilt');
+  art.addEventListener('mousemove', function (e) {
+    const r = art.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    art.style.setProperty('--mx', (x * 100).toFixed(1) + '%');
+    art.style.setProperty('--my', (y * 100).toFixed(1) + '%');
+    tilt.style.setProperty('--ry', ((x - 0.5) * 14).toFixed(1) + 'deg');
+    tilt.style.setProperty('--rx', ((0.5 - y) * 10).toFixed(1) + 'deg');
+  });
+  art.addEventListener('mouseleave', function () { tilt.style.setProperty('--ry', '0deg'); tilt.style.setProperty('--rx', '0deg'); });
+
+  const loginBtn = document.querySelector('.login-btn');
+  loginBtn.addEventListener('pointerdown', function (e) {
+    const r = loginBtn.getBoundingClientRect(), d = Math.max(r.width, r.height);
+    const rip = document.createElement('span');
+    rip.className = 'ripple';
+    rip.style.cssText = 'width:' + d + 'px;height:' + d + 'px;left:' + (e.clientX - r.left - d / 2) + 'px;top:' + (e.clientY - r.top - d / 2) + 'px';
+    loginBtn.appendChild(rip);
+    setTimeout(function () { rip.remove(); }, 600);
+  });
+
   document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const btn = e.target.querySelector('button');
-    btn.disabled = true; btn.textContent = 'جاري الدخول...';
+    loginBtn.disabled = true; loginBtn.classList.add('loading');
     try {
       const data = await api('login', { username: fd.get('username'), password: fd.get('password') });
       CURRENT_USER = data.user;
       sessionStorage.setItem('sara_user', JSON.stringify(CURRENT_USER));
       prefetchAll();
-      renderApp();
+      document.getElementById('login-screen').classList.add('leaving');
+      setTimeout(renderApp, 420);
     } catch (err) {
       renderLogin(err.message);
     }
