@@ -484,3 +484,42 @@ tbody tr:hover { background: var(--card-2); }
 .alert-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .alert-row:last-child { border-bottom: none; }
 @media (max-width: 700px) { .pos-grid { grid-template-columns: 1fr !important; } }
+
+/* ---------- شاشة الدخول (تصميم جديد) ---------- */
+.login-screen { min-height: 100vh; display: flex; align-items: stretch; justify-content: flex-start; background: #fff; }
+.login-art { flex: 1.1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 40px;
+  background: linear-gradient(155deg, var(--teal-light) 0%, var(--teal) 45%, var(--teal-dark) 100%); color: #fff; }
+.art-circle { position: absolute; border-radius: 50%; }
+.art-circle.c1 { width: 420px; height: 420px; top: -140px; left: -120px; background: rgba(255, 255, 255, 0.07); }
+.art-circle.c2 { width: 300px; height: 300px; bottom: -110px; right: -80px; border: 2px solid rgba(255, 255, 255, 0.18); }
+.art-circle.c3 { width: 140px; height: 140px; bottom: 90px; left: 60px; background: rgba(245, 85, 91, 0.35); filter: blur(2px); }
+.art-content { position: relative; text-align: center; max-width: 420px; animation: artIn .7s ease both; }
+.art-logo-wrap { background: #fff; border-radius: 22px; padding: 18px 26px; display: inline-block; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22); }
+.art-logo-wrap img { width: 260px; max-width: 100%; display: block; }
+.art-content h2 { font-size: 25px; line-height: 1.6; margin: 28px 0 8px; font-weight: 800; color: #fff; }
+.art-content p { margin: 0 0 24px; opacity: .85; font-size: 15px; }
+.art-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.art-chips span { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3); padding: 7px 14px; border-radius: 999px; font-size: 13px; backdrop-filter: blur(4px); }
+.login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px;
+  background: radial-gradient(circle at 85% 12%, rgba(245, 85, 91, 0.10), transparent 40%), #fff; }
+.login-card { background: transparent; border: none; box-shadow: none; padding: 0; width: 100%; max-width: 360px; text-align: right; animation: artIn .6s .1s ease both; }
+.login-card h1 { display: block; font-size: 28px; margin: 0 0 4px; color: var(--teal-dark); }
+.login-card p.subtitle { margin: 0 0 26px; font-size: 14px; color: var(--text-muted); }
+.card-logo { display: none; width: 170px; margin: 0 auto 18px; }
+.input-icon { position: relative; }
+.input-icon > span { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); font-size: 15px; opacity: .7; pointer-events: none; }
+.input-icon input { padding: 13px 42px 13px 42px; border-radius: 10px; background: #f3f8f9; border: 1.5px solid transparent; }
+.input-icon input:focus { background: #fff; border-color: var(--teal); }
+.pw-toggle { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; opacity: .6; padding: 6px; }
+.pw-toggle:hover { opacity: 1; }
+.login-btn { padding: 13px; font-size: 16px; border-radius: 10px; margin-top: 6px; box-shadow: 0 8px 20px rgba(245, 85, 91, 0.30); }
+.login-foot { margin-top: 26px; text-align: center; font-size: 12px; color: var(--text-muted); }
+@keyframes artIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (max-width: 820px) {
+  .login-art { display: none; }
+  .card-logo { display: block; }
+  .login-card { text-align: center; }
+  .login-card .field { text-align: right; }
+  .login-form-side { padding: 24px 20px; background: linear-gradient(160deg, #fff 0%, #eaf4f6 100%); }
+}
+.art-content h2 { text-wrap: balance; }

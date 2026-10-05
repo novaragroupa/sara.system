@@ -188,25 +188,42 @@ async function saveInBackground(overlay, work, opts) {
 function renderLogin(errorMsg) {
   root.innerHTML = `
     <div class="login-screen">
-      <div class="login-card">
-        <img src="logo.png" class="logo-mark" alt="${SHOP_NAME}" />
-        <h1>${SHOP_NAME}</h1>
-        <p class="subtitle">نظام إدارة المحل — سجّل دخولك للمتابعة</p>
-        ${errorMsg ? `<div class="error-msg">${errorMsg}</div>` : ''}
-        <form id="login-form">
-          <div class="field">
-            <label>اسم المستخدم</label>
-            <input type="text" name="username" required autocomplete="username" />
-          </div>
-          <div class="field">
-            <label>كلمة المرور</label>
-            <input type="password" name="password" required autocomplete="current-password" />
-          </div>
-          <button class="btn btn-primary btn-block" type="submit">دخول</button>
-        </form>
+      <div class="login-art">
+        <span class="art-circle c1"></span><span class="art-circle c2"></span><span class="art-circle c3"></span>
+        <div class="art-content">
+          <div class="art-logo-wrap"><img src="logo.png" alt="${SHOP_NAME}" /></div>
+          <h2>كل ما تحتاجه المرأة المسلمة من زي شرعي</h2>
+          <p>نظام إدارة محل ${SHOP_NAME}</p>
+          <div class="art-chips"><span>🧕 الأزياء</span><span>🛒 نقطة البيع</span><span>🏭 المصانع</span><span>📊 الحسابات</span></div>
+        </div>
+      </div>
+      <div class="login-form-side">
+        <div class="login-card">
+          <img src="logo.png" class="card-logo" alt="${SHOP_NAME}" />
+          <h1>أهلاً بيكي 👋</h1>
+          <p class="subtitle">سجّلي دخولك عشان تكملي شغلك</p>
+          ${errorMsg ? `<div class="error-msg">${esc(errorMsg)}</div>` : ''}
+          <form id="login-form">
+            <div class="field">
+              <label>اسم المستخدم</label>
+              <div class="input-icon"><span>👤</span><input type="text" name="username" required autocomplete="username" /></div>
+            </div>
+            <div class="field">
+              <label>كلمة المرور</label>
+              <div class="input-icon"><span>🔒</span><input type="password" name="password" id="login-pw" required autocomplete="current-password" />
+                <button type="button" class="pw-toggle" id="pw-toggle" aria-label="إظهار كلمة المرور">👁</button></div>
+            </div>
+            <button class="btn btn-primary btn-block login-btn" type="submit">دخول</button>
+          </form>
+          <div class="login-foot">${SHOP_NAME} · أزياء المرأة المسلمة</div>
+        </div>
       </div>
     </div>
   `;
+  document.getElementById('pw-toggle').addEventListener('click', function () {
+    const pw = document.getElementById('login-pw');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+  });
   document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
     const fd = new FormData(e.target);
